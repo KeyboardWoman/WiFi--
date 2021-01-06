@@ -1,16 +1,24 @@
-diff -Nur --strip-trailing-cr sulley/sulley/sessions.py sulley.wifi_patch/sulley/sessions.py
---- sulley/sulley/sessions.py	2012-08-18 22:49:37.411722811 +0200
-+++ sulley.wifi_patch/sulley/sessions.py	2012-08-18 22:21:05.838864733 +0200
-@@ -122,7 +122,7 @@
-         @type  log_level:          Integer
-         @kwarg log_level:          (Optional, def=2) Set the log level, higher number == more log messages
+--- sulley/sulley/sessions.py	2021-01-06 10:00:55.000000000 +0800
++++ sulley.truncate_patch/sulley/sessions.py	2021-01-06 10:01:12.000000000 +0800
+@@ -147,13 +147,13 @@
+         @kwarg log_level:          (Optional, def=logger.INFO) Set the log level
+         @type  logfile:            String
+         @kwarg logfile:            (Optional, def=None) Name of log file
+         @type  logfile_level:      Integer
+         @kwarg logfile_level:      (Optional, def=logger.INFO) Set the log level for the logfile
          @type  proto:              String
 -        @kwarg proto:              (Optional, def="tcp") Communication protocol ("tcp", "udp", "ssl")
 +        @kwarg proto:              (Optional, def="tcp") Communication protocol ("tcp", "udp", "ssl", "wifi")
          @type  bind:               Tuple (host, port)
          @kwarg bind:               (Optional, def=random) Socket bind address and port
          @type  timeout:            Float
-@@ -145,6 +145,8 @@
+         @kwarg timeout:            (Optional, def=5.0) Seconds to wait for a send/recv prior to timing out
+         @type  restart_interval:   Integer
+         @kwarg restart_interval    (Optional, def=0) Restart the target after n test cases, disable by setting to 0
+@@ -173,12 +173,14 @@
+         self.repeat_time         = repeat_time
+         self.repeat_number       = repeat_number
+         self.sleep_time          = sleep_time
          self.proto               = proto.lower()
          self.bind                = bind
          self.ssl                 = False
@@ -19,69 +27,92 @@ diff -Nur --strip-trailing-cr sulley/sulley/sessions.py sulley.wifi_patch/sulley
          self.restart_interval    = restart_interval
          self.timeout             = timeout
          self.web_port            = web_port
-@@ -170,6 +172,10 @@
+         self.crash_threshold     = crash_threshold
+         self.restart_sleep_time  = restart_sleep_time
+ 
+@@ -214,12 +216,16 @@
+         elif self.proto == "ssl":
+             self.proto = socket.SOCK_STREAM
+             self.ssl   = True
+ 
          elif self.proto == "udp":
              self.proto = socket.SOCK_DGRAM
- 
++
 +        elif self.proto == "wifi":
 +            self.proto = socket.SOCK_RAW
 +            self.wifi  = True
-+
-         else:
-             raise sex.error("INVALID PROTOCOL SPECIFIED: %s" % self.proto)
  
-@@ -420,26 +426,38 @@
+         else:
+             raise sex.SullyRuntimeError("INVALID PROTOCOL SPECIFIED: %s" % self.proto)
+ 
+         # import settings if they exist.
+         self.import_file()
+@@ -465,35 +471,46 @@
+                             try:
+                                 target.netmon.pre_send(self.total_mutant_index)
+                             except Exception, e:
                                  error_handler(e, "failed on netmon.pre_send()", target)
                                  continue
  
 -                        try:
 -                            # establish a connection to the target.
--                            sock = socket.socket(socket.AF_INET, self.proto)
+-                            (family, socktype, proto, canonname, sockaddr)=socket.getaddrinfo(target.host, target.port)[0]
+-                            sock = socket.socket(family, self.proto)
 -                        except Exception, e:
 -                            error_handler(e, "failed creating socket", target)
 -                            continue
--
--                        if self.bind:
-+                        if self.proto == socket.SOCK_STREAM or self.proto == socket.SOCK_DGRAM:
-                             try:
--                                sock.bind(self.bind)
++
++                       if self.proto == socket.SOCK_STREAM or self.proto == socket.SOCK_DGRAM:
++                            try:
 +                                # establish a connection to the target.
 +                                sock = socket.socket(socket.AF_INET, self.proto)
-                             except Exception, e:
--                                error_handler(e, "failed binding on socket", target, sock)
++                            except Exception, e:
 +                                error_handler(e, "failed creating socket", target)
-                                 continue
++                                continue
  
+-                        if self.bind:
+-                            try:
+-                                sock.bind(self.bind)
+-                            except Exception, e:
+-                                error_handler(e, "failed binding on socket", target, sock)
+-                                continue
+-
 -                        try:
 -                            sock.settimeout(self.timeout)
--                            sock.connect((target.host, target.port))
+-                            # Connect is needed only for TCP stream
+-                            if self.proto == socket.SOCK_STREAM:
+-                                sock.connect((target.host, target.port))
 -                        except Exception, e:
 -                            error_handler(e, "failed connecting on socket", target, sock)
 -                            continue
-+                            if self.bind:
-+                                try:
-+                                    sock.bind(self.bind)
-+                                except Exception, e:
-+                                    error_handler(e, "failed binding on socket", target, sock)
-+                                    continue
++                             if self.bind:
++                                 try:
++                                     sock.bind(self.bind)
++                                 except Exception, e:
++                                     error_handler(e, "failed binding on socket", target, sock)
++                                     continue
++ 
++                             try:
++                                 sock.settimeout(self.timeout)
++                                 sock.connect((target.host, target.port))
++                             except Exception, e:
++                                 error_handler(e, "failed connecting on socket", target, sock)
++                                 continue
++                                 
++                         elif self.wifi and self.wifi_iface:
++                             ETH_P_ALL = 3
++                             try:
++                                 sock = socket.socket(socket.AF_PACKET, self.proto, socket.htons(ETH_P_ALL))
++                             except Exception, e:
++                                 error_handler(e, "failed creating socket", target)
++                             try:
++                                 sock.bind((self.wifi_iface, ETH_P_ALL))
++                             except Exception, e:
++                                 error_handler(e, "failed binding on socket", target, sock)
 +
-+                            try:
-+                                sock.settimeout(self.timeout)
-+                                sock.connect((target.host, target.port))
-+                            except Exception, e:
-+                                error_handler(e, "failed connecting on socket", target, sock)
-+                                continue
-+                                
-+                        elif self.wifi and self.wifi_iface:
-+                            ETH_P_ALL = 3
-+                            try:
-+                                sock = socket.socket(socket.AF_PACKET, self.proto, socket.htons(ETH_P_ALL))
-+                            except Exception, e:
-+                                error_handler(e, "failed creating socket", target)
-+                            try:
-+                                sock.bind((self.wifi_iface, ETH_P_ALL))
-+                            except Exception, e:
-+                                error_handler(e, "failed binding on socket", target, sock)
  
                          # if SSL is requested, then enable it.
                          if self.ssl:
+                             try:
+                                 ssl  = socket.ssl(sock)
+                                 sock = httplib.FakeSocket(sock, ssl)

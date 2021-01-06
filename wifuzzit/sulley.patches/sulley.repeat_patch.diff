@@ -1,16 +1,24 @@
-diff -Nur --strip-trailing-cr sulley/sulley/sessions.py sulley.repeat_patch/sulley/sessions.py
---- sulley/sulley/sessions.py	2012-08-23 23:06:53.139769085 +0200
-+++ sulley.repeat_patch/sulley/sessions.py	2012-08-30 19:50:30.552542995 +0200
-@@ -109,7 +109,7 @@
- 
+--- sulley/sulley/sessions.py	2021-01-05 19:10:55.000000000 +0800
++++ sulley.repeat_patch/sulley/sessions.py	2021-01-06 09:46:22.000000000 +0800
+@@ -112,12 +112,14 @@
  ########################################################################################################################
  class session (pgraph.graph):
--    def __init__ (self, session_filename=None, skip=0, sleep_time=1.0, log_level=2, proto="tcp", bind=None, restart_interval=0, timeout=5.0, web_port=26000, crash_threshold=3, restart_sleep_time=300):
-+    def __init__ (self, session_filename=None, skip=0, repeat_time=0, repeat_number=0, sleep_time=1.0, log_level=2, proto="tcp", bind=None, restart_interval=0, timeout=5.0, web_port=26000, crash_threshold=3, restart_sleep_time=300):
-         '''
+     def __init__(
+                   self,
+                   session_filename=None,
+                   skip=0,
++                  repeat_time=0,
++                  repeat_number=0,
+                   sleep_time=1.0,
+                   log_level=logging.INFO,
+                   logfile=None,
+                   logfile_level=logging.DEBUG,
+                   proto="tcp",
+                   bind=None,
+@@ -131,12 +133,17 @@
          Extends pgraph.graph and provides a container for architecting protocol dialogs.
  
-@@ -117,6 +117,11 @@
+         @type  session_filename:   String
          @kwarg session_filename:   (Optional, def=None) Filename to serialize persistant data to
          @type  skip:               Integer
          @kwarg skip:               (Optional, def=0) Number of test cases to skip
@@ -22,16 +30,28 @@ diff -Nur --strip-trailing-cr sulley/sulley/sessions.py sulley.repeat_patch/sull
          @type  sleep_time:         Float
          @kwarg sleep_time:         (Optional, def=1.0) Time to sleep in between tests
          @type  log_level:          Integer
-@@ -140,6 +145,8 @@
+         @kwarg log_level:          (Optional, def=logger.INFO) Set the log level
+         @type  logfile:            String
+         @kwarg logfile:            (Optional, def=None) Name of log file
+@@ -160,12 +167,14 @@
+ 
+         # run the parent classes initialization routine first.
+         pgraph.graph.__init__(self)
  
          self.session_filename    = session_filename
          self.skip                = skip
 +        self.repeat_time         = repeat_time
 +        self.repeat_number       = repeat_number
          self.sleep_time          = sleep_time
-         self.log_level           = log_level
          self.proto               = proto.lower()
-@@ -467,11 +474,21 @@
+         self.bind                = bind
+         self.ssl                 = False
+         self.restart_interval    = restart_interval
+         self.timeout             = timeout
+@@ -506,17 +515,27 @@
+                                 self.transmit(sock, node, e, target)
+                         except Exception, e:
+                             error_handler(e, "failed transmitting a node up the path", target, sock)
                              continue
  
                          # now send the current node we are fuzzing.
@@ -58,3 +78,6 @@ diff -Nur --strip-trailing-cr sulley/sulley/sessions.py sulley.repeat_patch/sull
  
                          # if we reach this point the send was successful for break out of the while(1).
                          break
+ 
+                     # if the user registered a post-send function, pass it the sock and let it do the deed.
+                     # we do this outside the try/except loop because if our fuzz causes a crash then the post_send()
