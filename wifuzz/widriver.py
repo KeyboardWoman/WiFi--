@@ -23,6 +23,7 @@ from types import ClassType
 
 from scapy.sendrecv import sniff
 from scapy.layers.dot11 import *
+from scapy.all import *
 
 from common import log, WiExceptionTimeout
 import wifuzzers
